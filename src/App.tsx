@@ -6,7 +6,7 @@ function App() {
         <div className="app-container">
             <Home/>
             <footer className="footer">
-                <div className="footer-copyright">Spaceport Mirrors</div>
+                <div className="footer-copyright">© Commit 451</div>
             </footer>
         </div>
     )

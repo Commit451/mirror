@@ -7,4 +7,4 @@ binding = "BUCKET"
 bucket_name = "mirror"
 
 [vars]
-SITE_NAME = "Spaceport Mirrors"
+SITE_NAME = "Mirrors"

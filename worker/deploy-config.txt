@@ -1,0 +1,6 @@
+# Deployment configuration
+# Paths to preserve during site cleanup
+# These files/directories will NOT be deleted when deploying new site files
+# Add one path per line (prefix match)
+
+gradle/

@@ -2,7 +2,7 @@ function Home() {
     return (
         <main className="main-content">
             <section className="hero">
-                <span className="eyebrow">Commit 451</span>
+                <a href="https://spaceport.work" className="eyebrow" target="_blank" rel="noopener noreferrer">Commit 451</a>
                 <h1>Mirrors</h1>
                 <p className="subtitle">
                     Fast, free, hosted on Cloudflare
@@ -26,8 +26,8 @@ function Home() {
                             </div>
                         </div>
                         <p>
-                            Mirror of official Gradle distributions. All versions from
-                            gradle-8.14.1 to the latest release.
+                            Mirror of official Gradle distributions. All stable versions from
+                            gradle-8.14.3 to the latest release.
                         </p>
                         <div className="mirror-card-footer">
                             <div className="mirror-status">

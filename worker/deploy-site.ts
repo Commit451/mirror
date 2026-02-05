@@ -154,8 +154,7 @@ async function uploadSiteFiles(): Promise<number> {
       exec(
         `wrangler r2 object put ${escapeShellArg(CONFIG.bucketName + '/' + key)} ` +
         `--file=${escapeShellArg(file)} ` +
-        `--content-type=${escapeShellArg(contentType)} ` +
-        `--remote`,
+        `--content-type=${escapeShellArg(contentType)}`,
         `upload ${key}`
       );
       uploadedCount++;

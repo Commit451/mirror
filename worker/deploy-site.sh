@@ -62,7 +62,7 @@ for file in $(find "$DIST_DIR" -type f); do
   esac
 
   echo "  Uploading: $key"
-  wrangler r2 object put "$BUCKET_NAME/$key" --file="$file" --content-type="$content_type"
+  wrangler r2 object put "$BUCKET_NAME/$key" --file="$file" --content-type="$content_type" --remote
   ((UPLOADED_COUNT++))
 done
 

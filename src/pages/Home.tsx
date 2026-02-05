@@ -2,8 +2,8 @@ function Home() {
     return (
         <main className="main-content">
             <section className="hero">
-                <span className="eyebrow">Mirror</span>
-                <h1>Spaceport Mirrors</h1>
+                <span className="eyebrow">Commit 451</span>
+                <h1>Mirrors</h1>
                 <p className="subtitle">
                     Fast, free, and reliable mirror.
                 </p>
@@ -49,7 +49,7 @@ function Home() {
                         <strong>Gradle Wrapper:</strong> Set <code>distributionUrl</code> in{' '}
                         <code>gradle/wrapper/gradle-wrapper.properties</code> to use this mirror:
                         <br/>
-                        <code>distributionUrl=https\://mirrors.spaceport.work/gradle/gradle-8.5-bin.zip</code>
+                        <code>distributionUrl=https\://mirrors.spaceport.work/gradle/gradle-9.0.0-bin.zip</code>
                     </li>
                     <li>
                         <strong>Direct download:</strong> Browse the mirror directory to find and download

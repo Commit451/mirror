@@ -194,7 +194,7 @@ function generateHTML(
     :root {
       --bg: #0a0a0a;
       --fg: #e5e5e5;
-      --accent: #3b82f6;
+      --accent: #ff2525;
       --border: #262626;
       --hover: #171717;
     }
@@ -272,7 +272,7 @@ function generateHTML(
 </head>
 <body>
   <div class="container">
-    <a href="/" class="back-link">&larr; Back to Spaceport Mirrors</a>
+    <a href="/" class="back-link">&larr; Back to mirrors</a>
     <h1>Index of ${path}</h1>
     <table>
       <thead>

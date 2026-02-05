@@ -3,9 +3,13 @@ set -e
 
 # Deploy script for the mirror site
 # This script:
-# 1. Cleans up old site files from R2 (preserving configured paths)
-# 2. Uploads new site files from ../dist
-# 3. Deploys the worker
+# 1. Uploads new site files from ../dist
+# 2. Deploys the worker
+#
+# NOTE: Automatic cleanup is not yet implemented due to wrangler limitations.
+# To manually clean up old files:
+#   1. Go to Cloudflare Dashboard > R2 > mirror bucket
+#   2. Delete files you no longer need (keeping paths in deploy-config.txt)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/deploy-config.txt"
@@ -22,65 +26,22 @@ if [ ! -d "$DIST_DIR" ]; then
   exit 1
 fi
 
-# Read ignore paths from config file
-IGNORE_PATHS=()
+# Show ignore paths from config file (for reference)
 if [ -f "$CONFIG_FILE" ]; then
-  echo "Reading deployment config from $CONFIG_FILE"
+  echo "Paths configured to preserve (manual cleanup only):"
   while IFS= read -r line || [ -n "$line" ]; do
     # Skip empty lines and comments
     [[ "$line" =~ ^[[:space:]]*$ ]] && continue
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
     # Trim whitespace
     line=$(echo "$line" | xargs)
-    IGNORE_PATHS+=("$line")
+    echo "  - $line"
   done < "$CONFIG_FILE"
-
-  echo "Paths to preserve:"
-  for path in "${IGNORE_PATHS[@]}"; do
-    echo "  - $path"
-  done
-  echo ""
-else
-  echo "Warning: Config file not found at $CONFIG_FILE"
-  echo "Proceeding without ignore paths"
   echo ""
 fi
 
-# Step 1: Clean up old site files
-echo "Step 1: Cleaning up old site files from R2..."
-echo "Listing all objects in bucket..."
-wrangler r2 object list "$BUCKET_NAME" --output json > /tmp/r2_objects.json
-
-echo "Processing objects for deletion..."
-DELETED_COUNT=0
-SKIPPED_COUNT=0
-
-jq -r '.objects[].key' /tmp/r2_objects.json | while read -r key; do
-  should_delete=true
-
-  # Check if key matches any ignore pattern
-  for ignore_path in "${IGNORE_PATHS[@]}"; do
-    if [[ "$key" == "$ignore_path"* ]]; then
-      echo "  Skipping (ignored): $key"
-      ((SKIPPED_COUNT++))
-      should_delete=false
-      break
-    fi
-  done
-
-  # Delete if not ignored
-  if [ "$should_delete" = true ]; then
-    echo "  Deleting: $key"
-    wrangler r2 object delete "$BUCKET_NAME/$key"
-    ((DELETED_COUNT++))
-  fi
-done
-
-echo "Cleanup complete: $DELETED_COUNT deleted, $SKIPPED_COUNT skipped"
-echo ""
-
-# Step 2: Upload new site files
-echo "Step 2: Uploading new site files from $DIST_DIR..."
+# Step 1: Upload new site files
+echo "Step 1: Uploading site files from $DIST_DIR..."
 UPLOADED_COUNT=0
 
 for file in $(find "$DIST_DIR" -type f); do
@@ -100,7 +61,7 @@ for file in $(find "$DIST_DIR" -type f); do
     *.ico) content_type="image/x-icon" ;;
   esac
 
-  echo "  Uploading: $key ($content_type)"
+  echo "  Uploading: $key"
   wrangler r2 object put "$BUCKET_NAME/$key" --file="$file" --content-type="$content_type"
   ((UPLOADED_COUNT++))
 done
@@ -108,10 +69,15 @@ done
 echo "Upload complete: $UPLOADED_COUNT files uploaded"
 echo ""
 
-# Step 3: Deploy worker
-echo "Step 3: Deploying worker..."
+# Step 2: Deploy worker
+echo "Step 2: Deploying worker..."
 cd "$SCRIPT_DIR"
 wrangler deploy
 
 echo ""
 echo "=== Deployment Complete ==="
+echo ""
+echo "NOTE: Old site files are not automatically deleted."
+echo "If you've renamed or removed files, you may want to clean them up manually"
+echo "via the Cloudflare Dashboard (R2 > $BUCKET_NAME bucket)."
+echo "Remember to preserve paths listed in deploy-config.txt (e.g., gradle/)."

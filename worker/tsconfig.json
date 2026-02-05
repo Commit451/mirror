@@ -4,10 +4,11 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2021"],
-    "types": ["@cloudflare/workers-types"],
+    "types": ["@cloudflare/workers-types", "@types/node"],
     "strict": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "esModuleInterop": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "deploy-site.ts", "cleanup-r2.ts"]
 }

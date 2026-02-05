@@ -28,8 +28,10 @@ jobs:
       - name: Build Site
         run: npm run build
 
-      - name: Install Wrangler
-        run: npm install -g wrangler
+      - name: Install Worker Dependencies
+        run: |
+          cd worker
+          npm install
 
       - name: Deploy Site and Worker
         env:

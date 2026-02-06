@@ -11,7 +11,7 @@ distributionUrl=https\://services.gradle.org/distributions/gradle-9.0.0-bin.zip
 with ours:
 
 ```
-distributionUrl=https\://mirrors.spaceport.work/gradle/gradle-9.0.0-bin.zip
+distributionUrl=https\://mirror.spaceport.work/gradle/gradle-9.0.0-bin.zip
 ```
 
 ## Dev

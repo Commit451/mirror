@@ -49,7 +49,7 @@ function Home() {
                         <strong>Gradle Wrapper:</strong> Set <code>distributionUrl</code> in{' '}
                         <code>gradle/wrapper/gradle-wrapper.properties</code> to use this mirror:
                         <br/>
-                        <code>distributionUrl=https\://mirrors.spaceport.work/gradle/gradle-9.0.0-bin.zip</code>
+                        <code>distributionUrl=https\://mirror.spaceport.work/gradle/gradle-9.0.0-bin.zip</code>
                     </li>
                     <li>
                         <strong>Direct download:</strong> Browse the mirror directory to find and download

@@ -128,9 +128,9 @@ async function generateDirectoryListing(env: Env, prefix: string, displayPath: s
     });
   }
 
-  // Sort alphabetically
-  directories.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  files.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  // Sort reverse alphabetically
+  directories.sort((a, b) => b.toLowerCase().localeCompare(a.toLowerCase()));
+  files.sort((a, b) => b.name.toLowerCase().localeCompare(a.name.toLowerCase()));
 
   const html = generateHTML(displayPath, directories, files);
 

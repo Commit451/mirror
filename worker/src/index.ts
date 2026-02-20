@@ -1,6 +1,5 @@
 interface Env {
   BUCKET: R2Bucket;
-  SITE_NAME: string;
 }
 
 // SPA routes that should serve index.html
@@ -9,14 +8,68 @@ const SPA_ROUTES = ['/', '/index.html'];
 // File extensions that indicate a direct file request (not a directory)
 const FILE_EXTENSIONS = /\.[a-zA-Z0-9]+$/;
 
+// Security headers applied to all responses
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+};
+
+// CSP for HTML pages only
+const HTML_CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'";
+
+function addSecurityHeaders(response: Response, isHtml = false): Response {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(key, value);
+  }
+  if (isHtml) {
+    headers.set('Content-Security-Policy', HTML_CSP);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/**
+ * Validates and sanitizes the request path.
+ * Returns null if the path is malicious.
+ */
+function sanitizePath(rawPath: string): string | null {
+  const path = decodeURIComponent(rawPath);
+
+  // Block path traversal attempts and null bytes
+  if (path.includes('..') || path.includes('\0') || path.includes('\\')) {
+    return null;
+  }
+
+  // Block encoded variants that survived decoding
+  if (path.includes('%2e%2e') || path.includes('%2E%2E') || path.includes('%00')) {
+    return null;
+  }
+
+  return path;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // Only allow GET and HEAD methods
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return addSecurityHeaders(new Response('Method Not Allowed', { status: 405 }));
+    }
+
     const url = new URL(request.url);
-    let path = decodeURIComponent(url.pathname);
+    const path = sanitizePath(url.pathname);
+
+    if (path === null) {
+      return addSecurityHeaders(new Response('Bad Request', { status: 400 }));
+    }
 
     // Handle SPA routes - serve index.html
     if (SPA_ROUTES.includes(path)) {
-      return serveFile(env, 'index.html', 'text/html; charset=utf-8');
+      return addSecurityHeaders(await serveFile(env, 'index.html', 'text/html; charset=utf-8'), true);
     }
 
     // Handle static assets (JS, CSS, etc.) - files with extensions in root
@@ -25,16 +78,16 @@ export default {
       const file = await env.BUCKET.get(key);
 
       if (file) {
-        return new Response(file.body, {
+        return addSecurityHeaders(new Response(file.body, {
           headers: {
             'Content-Type': getContentType(path),
             'Cache-Control': 'public, max-age=31536000, immutable',
           },
-        });
+        }));
       }
 
-      // If asset not found, serve SPA for client-side routing
-      return serveFile(env, 'index.html', 'text/html; charset=utf-8');
+      // Asset not found — return 404 instead of falling back to SPA
+      return addSecurityHeaders(new Response('Not Found', { status: 404 }));
     }
 
     // Handle directory listings and file downloads for mirror content
@@ -46,14 +99,14 @@ export default {
 
       if (file) {
         // It's a file, serve it
-        return new Response(file.body, {
+        return addSecurityHeaders(new Response(file.body, {
           headers: {
             'Content-Type': getContentType(path),
             'Content-Length': file.size.toString(),
             'ETag': file.etag,
             'Cache-Control': 'public, max-age=86400',
           },
-        });
+        }));
       }
 
       // It's likely a directory, redirect to add trailing slash
@@ -63,7 +116,7 @@ export default {
     // Directory listing
     if (path.endsWith('/')) {
       const prefix = path === '/' ? '' : path.slice(1);
-      return generateDirectoryListing(env, prefix, path);
+      return addSecurityHeaders(await generateDirectoryListing(env, prefix, path), true);
     }
 
     // File download
@@ -71,17 +124,17 @@ export default {
     const file = await env.BUCKET.get(key);
 
     if (!file) {
-      return new Response('Not Found', { status: 404 });
+      return addSecurityHeaders(new Response('Not Found', { status: 404 }));
     }
 
-    return new Response(file.body, {
+    return addSecurityHeaders(new Response(file.body, {
       headers: {
         'Content-Type': getContentType(path),
         'Content-Length': file.size.toString(),
         'ETag': file.etag,
         'Cache-Control': 'public, max-age=86400',
       },
-    });
+    }));
   },
 };
 
@@ -142,12 +195,25 @@ async function generateDirectoryListing(env: Env, prefix: string, displayPath: s
   });
 }
 
+/**
+ * Escapes a string for safe inclusion in HTML content.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function generateHTML(
   path: string,
   directories: string[],
   files: { name: string; size: number; modified: Date }[]
 ): string {
   const parentPath = path === '/' ? null : path.split('/').slice(0, -2).join('/') + '/';
+  const safePath = escapeHtml(path);
 
   let rows = '';
 
@@ -156,7 +222,7 @@ function generateHTML(
     rows += `
       <tr>
         <td class="icon">&#x1F4C1;</td>
-        <td class="name"><a href="${parentPath}">..</a></td>
+        <td class="name"><a href="${escapeHtml(parentPath)}">..</a></td>
         <td class="size">-</td>
         <td class="modified">-</td>
       </tr>`;
@@ -164,10 +230,11 @@ function generateHTML(
 
   // Directories
   for (const dir of directories) {
+    const safeDir = escapeHtml(dir);
     rows += `
       <tr>
         <td class="icon">&#x1F4C1;</td>
-        <td class="name"><a href="${path}${dir}">${dir}</a></td>
+        <td class="name"><a href="${safePath}${safeDir}">${safeDir}</a></td>
         <td class="size">-</td>
         <td class="modified">-</td>
       </tr>`;
@@ -175,10 +242,11 @@ function generateHTML(
 
   // Files
   for (const file of files) {
+    const safeName = escapeHtml(file.name);
     rows += `
       <tr>
         <td class="icon">&#x1F4C4;</td>
-        <td class="name"><a href="${path}${file.name}">${file.name}</a></td>
+        <td class="name"><a href="${safePath}${safeName}">${safeName}</a></td>
         <td class="size">${formatSize(file.size)}</td>
         <td class="modified">${formatDate(file.modified)}</td>
       </tr>`;
@@ -189,7 +257,7 @@ function generateHTML(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Index of ${path}</title>
+  <title>Index of ${safePath}</title>
   <style>
     :root {
       --bg: #0a0a0a;
@@ -273,7 +341,7 @@ function generateHTML(
 <body>
   <div class="container">
     <a href="/" class="back-link">&larr; Back to mirrors</a>
-    <h1>Index of ${path}</h1>
+    <h1>Index of ${safePath}</h1>
     <table>
       <thead>
         <tr>

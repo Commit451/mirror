@@ -112,8 +112,8 @@ function listObjects(endpoint: string): string[] {
   log('Listing objects in R2 bucket...');
 
   const output = exec(
-    `aws s3 ls "s3://${CONFIG.bucketName}/" --recursive ` +
-    `--endpoint-url="${endpoint}" ` +
+    `aws s3 ls ${escapeShellArg(`s3://${CONFIG.bucketName}/`)} --recursive ` +
+    `--endpoint-url=${escapeShellArg(endpoint)} ` +
     `--profile ${CONFIG.awsProfile}`,
     true
   );
@@ -145,10 +145,14 @@ function shouldIgnore(key: string, ignorePaths: string[]): boolean {
   return false;
 }
 
+function escapeShellArg(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 function deleteObject(key: string, endpoint: string): void {
   exec(
-    `aws s3 rm "s3://${CONFIG.bucketName}/${key}" ` +
-    `--endpoint-url="${endpoint}" ` +
+    `aws s3 rm ${escapeShellArg(`s3://${CONFIG.bucketName}/${key}`)} ` +
+    `--endpoint-url=${escapeShellArg(endpoint)} ` +
     `--profile ${CONFIG.awsProfile}`,
     true
   );

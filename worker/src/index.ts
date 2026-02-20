@@ -34,32 +34,89 @@ function addSecurityHeaders(response: Response, isHtml = false): Response {
 }
 
 /**
+ * Creates a redirect response with security headers.
+ */
+function secureRedirect(url: string, status: 301 | 302 = 301): Response {
+  const response = new Response(null, {
+    status,
+    headers: { 'Location': url },
+  });
+  return addSecurityHeaders(response);
+}
+
+/**
  * Validates and sanitizes the request path.
  * Returns null if the path is malicious.
  */
 function sanitizePath(rawPath: string): string | null {
-  const path = decodeURIComponent(rawPath);
-
-  // Block path traversal attempts and null bytes
-  if (path.includes('..') || path.includes('\0') || path.includes('\\')) {
+  let path: string;
+  try {
+    path = decodeURIComponent(rawPath);
+  } catch {
+    // Malformed percent-encoding
     return null;
   }
 
-  // Block encoded variants that survived decoding
-  if (path.includes('%2e%2e') || path.includes('%2E%2E') || path.includes('%00')) {
+  // Block null bytes and backslashes
+  if (path.includes('\0') || path.includes('\\')) {
+    return null;
+  }
+
+  // Block path traversal: check each segment for ".."
+  const segments = path.split('/');
+  if (segments.some(segment => segment === '..')) {
     return null;
   }
 
   return path;
 }
 
+/**
+ * Serves a file from R2, handling HEAD requests efficiently.
+ * For HEAD requests, uses BUCKET.head() to avoid streaming the full body.
+ */
+async function serveR2Object(
+  env: Env,
+  key: string,
+  contentType: string,
+  cacheControl: string,
+  isHead: boolean,
+): Promise<Response | null> {
+  if (isHead) {
+    const head = await env.BUCKET.head(key);
+    if (!head) return null;
+    return new Response(null, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': head.size.toString(),
+        'ETag': head.etag,
+        'Cache-Control': cacheControl,
+      },
+    });
+  }
+
+  const file = await env.BUCKET.get(key);
+  if (!file) return null;
+  return new Response(file.body, {
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': file.size.toString(),
+      'ETag': file.etag,
+      'Cache-Control': cacheControl,
+    },
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Only allow GET and HEAD methods
     if (request.method !== 'GET' && request.method !== 'HEAD') {
-      return addSecurityHeaders(new Response('Method Not Allowed', { status: 405 }));
+      const response = new Response('Method Not Allowed', { status: 405 });
+      response.headers.set('Allow', 'GET, HEAD');
+      return addSecurityHeaders(response);
     }
 
+    const isHead = request.method === 'HEAD';
     const url = new URL(request.url);
     const path = sanitizePath(url.pathname);
 
@@ -69,21 +126,16 @@ export default {
 
     // Handle SPA routes - serve index.html
     if (SPA_ROUTES.includes(path)) {
-      return addSecurityHeaders(await serveFile(env, 'index.html', 'text/html; charset=utf-8'), true);
+      return addSecurityHeaders(await serveFile(env, 'index.html', 'text/html; charset=utf-8', isHead), true);
     }
 
     // Handle static assets (JS, CSS, etc.) - files with extensions in root
     if (FILE_EXTENSIONS.test(path) && !path.includes('/gradle/')) {
       const key = path.startsWith('/') ? path.slice(1) : path;
-      const file = await env.BUCKET.get(key);
+      const response = await serveR2Object(env, key, getContentType(path), 'public, max-age=31536000, immutable', isHead);
 
-      if (file) {
-        return addSecurityHeaders(new Response(file.body, {
-          headers: {
-            'Content-Type': getContentType(path),
-            'Cache-Control': 'public, max-age=31536000, immutable',
-          },
-        }));
+      if (response) {
+        return addSecurityHeaders(response);
       }
 
       // Asset not found — return 404 instead of falling back to SPA
@@ -93,24 +145,15 @@ export default {
     // Handle directory listings and file downloads for mirror content
     // Normalize path - ensure directories end with /
     if (!path.endsWith('/') && !FILE_EXTENSIONS.test(path)) {
-      // Check if it's a file or directory
       const key = path.startsWith('/') ? path.slice(1) : path;
-      const file = await env.BUCKET.get(key);
+      const response = await serveR2Object(env, key, getContentType(path), 'public, max-age=86400', isHead);
 
-      if (file) {
-        // It's a file, serve it
-        return addSecurityHeaders(new Response(file.body, {
-          headers: {
-            'Content-Type': getContentType(path),
-            'Content-Length': file.size.toString(),
-            'ETag': file.etag,
-            'Cache-Control': 'public, max-age=86400',
-          },
-        }));
+      if (response) {
+        return addSecurityHeaders(response);
       }
 
       // It's likely a directory, redirect to add trailing slash
-      return Response.redirect(`${url.origin}${path}/`, 301);
+      return secureRedirect(`${url.origin}${path}/`);
     }
 
     // Directory listing
@@ -121,29 +164,31 @@ export default {
 
     // File download
     const key = path.startsWith('/') ? path.slice(1) : path;
-    const file = await env.BUCKET.get(key);
+    const response = await serveR2Object(env, key, getContentType(path), 'public, max-age=86400', isHead);
 
-    if (!file) {
+    if (!response) {
       return addSecurityHeaders(new Response('Not Found', { status: 404 }));
     }
 
-    return addSecurityHeaders(new Response(file.body, {
-      headers: {
-        'Content-Type': getContentType(path),
-        'Content-Length': file.size.toString(),
-        'ETag': file.etag,
-        'Cache-Control': 'public, max-age=86400',
-      },
-    }));
+    return addSecurityHeaders(response);
   },
 };
 
-async function serveFile(env: Env, key: string, contentType: string): Promise<Response> {
-  const file = await env.BUCKET.get(key);
-
-  if (!file) {
-    return new Response('Not Found', { status: 404 });
+async function serveFile(env: Env, key: string, contentType: string, isHead: boolean): Promise<Response> {
+  if (isHead) {
+    const head = await env.BUCKET.head(key);
+    if (!head) return new Response('Not Found', { status: 404 });
+    return new Response(null, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': head.size.toString(),
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
   }
+
+  const file = await env.BUCKET.get(key);
+  if (!file) return new Response('Not Found', { status: 404 });
 
   return new Response(file.body, {
     headers: {

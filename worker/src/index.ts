@@ -235,7 +235,7 @@ async function generateDirectoryListing(env: Env, prefix: string, displayPath: s
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=60',
+      'Cache-Control': 'public, max-age=31536000',
     },
   });
 }

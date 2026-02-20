@@ -400,6 +400,9 @@ function generateHTML(
         ${rows}
       </tbody>
     </table>
+    <footer style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: #a3a3a3;">
+      <a href="https://github.com/Commit451/mirror" style="color: #a3a3a3;">See source</a>
+    </footer>
   </div>
 </body>
 </html>`;
